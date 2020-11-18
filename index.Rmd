@@ -1,0 +1,253 @@
+---
+pagetitle: Instrument relevance and exogeneity
+output: 
+  revealjs::revealjs_presentation:
+    incremental: false
+    theme: solarized
+    self_contained: false
+    # reveal_plugins: ["menu","notes","chalkboard"]
+    reveal_plugins: ["menu"]
+    highlight: pygments
+    center: true
+    transition: none
+    background_transition: none 
+    reveal_options:
+      # chalkboard:
+      #   theme: whiteboard
+      #   toggleNotesButton: true
+      #   toggleChalkboardButton: true
+      menu:
+        numbers: true
+      slideNumber: true
+      previewLinks: false
+    fig_caption: true
+    pandoc_args:
+    - --indented-code-classes
+    - lineNumbers
+    css: mystyle.css
+    
+--- 
+
+<section>
+
+<h1>Instrument relevance and exogeneity</h1>
+
+Based on Stock and Watson, ch. 12
+
+<br>
+
+<h2>[Jesper Bagger](mailto:jesper.bagger@rhul.ac.uk)</h2>
+
+<h3>EC3133 | Royal Holloway | 2020/21</h3>
+
+</section>
+
+```{r results='asis', echo=FALSE, include=FALSE}
+library(AER) # Load Applied Econometrics with R library
+library(parameters) # Load parameters library 
+data(CigarettesSW) # Load CigarettesSW data
+# Construct useful variables
+CigarettesSW.1995 <- subset(CigarettesSW, year == "1995") # Select 1995 cross section
+CigarettesSW.1995$price <- CigarettesSW.1995$price/CigarettesSW.1995$cpi # Real price (1995 prices)
+CigarettesSW.1995$income <- CigarettesSW.1995$income/CigarettesSW.1995$cpi # Real income (1995 prices)
+CigarettesSW.1995$taxs <- CigarettesSW.1995$taxs/CigarettesSW.1995$cpi # Real excise tax incl sales tax (1995 prices)
+CigarettesSW.1995$tax <- CigarettesSW.1995$tax/CigarettesSW.1995$cpi # Real excise tax (1995 prices)
+CigarettesSW.1995$taxc <- (CigarettesSW.1995$taxs-CigarettesSW.1995$tax)/CigarettesSW.1995$cpi # Real excise tax (1995 prices)
+CigarettesSW.1995$SalesTax <- CigarettesSW.1995$taxs - CigarettesSW.1995$tax # Real sales tax (1995)
+CigarettesSW.1995$incprcap <- CigarettesSW.1995$income/CigarettesSW.1995$population # Real income/cap
+```
+
+# The general IV regression model
+
+## The general IV regression model
+
+<div class="box">
+The general IV regression model is, for $i = 1,\ldots,n$
+
+\begin{multline*}
+Y_i = \beta_0 + \beta_1 X_{1i} + \ldots + \beta_k X_{ki} \\
++ \beta_{k+1} W_{1i} + \ldots + \beta_{k+r} X_{ri} + u_i
+\end{multline*}
+
+where the $X$s are $k$ **endogenous** regressors, the $W$s are $r$ **exogenous** regressors/control variables.
+
+Have $m$ instruments: $(Z_{1i}, \ldots, Z_{mi},i = 1,\ldots,n)$
+
+</div>
+
+## 2SLS in the general IV regression model
+
+<div class="box">
+1. Regress $X_{1i}$ on $(Z_{1i}, \ldots, Z_{mi},W_{1i}, \ldots, W_{ri})$ using OLS, and compute fitted value $\hat{X}_{1i}$. Repeat for other endogenous regressors $(X_{2i}, \ldots, X_{ki})$.
+
+2. Regress $Y_i$ on $(\hat{X}_{1i}, \ldots, \hat{X}_{ki},W_{1i}, \ldots, W_{ri})$ using OLS. The 2SLS estimators $(\hat{\beta}_{1,2SLS},\ldots,\hat{\beta}_{k,2SLS})$ are the 2nd stage estimators of $(\beta_1,\ldots,\beta_k)$.
+
+Compute 2SLS using `ivreg` in R to ensure correct SEs
+</div>
+
+## 2SLS regression in R
+
+```{r, echo = TRUE, eval = TRUE}    
+# 2SLS with  m = 2 instruments
+iv1 <- ivreg(log(packs) ~ log(price) + log(incprcap)  | SalesTax + tax + log(incprcap), data = CigarettesSW.1995)
+parameters(iv1, robust=TRUE, vcov_type="HC1", digits = 4, ci_digits = 4, p_digits = "scientific") # Compute and print robust SEs
+```
+
+## First stage regression
+
+```{r, echo = TRUE, eval = TRUE}    
+# First stage regression for iv1
+first.stage.iv1 <- lm(log(price) ~ log(incprcap) +  SalesTax + tax, data = CigarettesSW.1995)
+parameters(first.stage.iv1, robust=TRUE, vcov_type="HC1", digits = 4, ci_digits = 4, p_digits = "scientific") # Compute and print robust SEs
+```
+
+# Instrument validity
+
+## Instrument relevance
+
+<div class="box">
+Let $X_{1i}^*$ be the fitted value of $X_{1i}$ from the *population* first stage regression for $X_{1i}$, and let $X_{0i}=1$ for all $i$ denote the constant regressor. Then,
+
+$$(X_{1i}^*,\ldots,X_{ki}^*,W_{1i},\ldots,W_{ri},1)$$
+
+are not perfectly multicollinear.
+
+If there is *only one* $X$, instrument relevance requires at least on $Z$ must have non-zero coefficient in the population first stage regression
+   
+</div>
+
+## Instrument exogeneity
+
+<div class="box">
+The instrumental variables $(Z_{1i}, \ldots, Z_{mi})$ are uncorrelated with the error term $u_i$
+
+$$\mathrm{cov}(Z_{1i},u_i) = \ldots = \mathrm{cov}(Z_{mi},u_i) = 0$$
+</div>
+
+
+## The IV regression assumptions
+
+<div class="box">
+The variables and errors in the general IV regression model satisfy the following
+
+1. $\mathrm{E}(u_i|W_{1i},\ldots,W_{ri}) = 0$
+
+2. $(Y_i, X_{1i}, \ldots, X_{ki}, W_{1i}, \ldots, W_{ri}, Z_{1i}, \ldots, Z_{mi})$ is i.i.d.
+
+3. Large outliers are unlikely: $Y$, the $X$s, $W$s, and $Z$s have nonzero finite fourth moments,
+
+4. Instrument relevance and exogeneity hold
+</div>
+
+## 2SLS properties
+
+- Under the IV regression assumptions, the 2SLS estimators of $(\beta_1,\ldots,\beta_k)$ in the general IV regression model are consistent
+
+  <div class="box">
+  $$\hat{\beta}_{1,2SLS} \overset{p}{\rightarrow} \beta_1; \quad \ldots \quad \hat{\beta}_{k,2SLS} \overset{p}{\rightarrow} \beta_k$$
+  </div>
+  
+- Likewise, under the IV regression assumptions, the 2SLS estimators of $(\beta_1,\ldots,\beta_k)$ are approximately normal distributed in large samples
+
+# Irrelevant or weak instruments
+
+## Irrelevant or weak instruments
+
+- An instrument is **irrelevant** when, given the other instruments and control variables, it has no predictive power vis-a-vis one of the endogeneous regressors
+
+- 2SLS with an irrelevant instrument is inconsistent, and has a non-normal asymptotic sampling distribution
+
+- An instrument is **weak** when, given the other instruments and control variables, it has only weak predictive power vis-a-vis one of the endogeneous regressors
+
+- 2SLS with a weak instrument is biased towards OLS estimate, and normal sampling distribution approximation is poor, even in large samples
+
+## A rule of thumb for checking for weak instruments
+
+<div class="box">
+The 1st stage $F$-statistic is the $F$ statistic testing the hypothesis that the coefficients on the instruments $Z_{1i}, \ldots, Z_{mi}$ equal 0 in the 1st stage in the 2SLS procedure. 
+
+When there is a *single* endogeneous regressor, a 1st stage $F$-statistic less than 10 indicates a weak instrument problem.
+</div>
+
+## Weak instrument $F$-statistic in R
+
+```{r, echo = TRUE, eval = TRUE}    
+# Weak instrument F stat
+linearHypothesis(first.stage.iv1, c("SalesTax=0", "tax=0"), white.adjust = "hc1")
+```
+
+# Endogenous instruments
+
+## Endogenous instruments
+
+- An instrument is **endogenous** when, given the other instruments and control variables, correlates with the error term $u_i$: exclusion restriction fails
+
+- 2SLS with an an endogenous instrument is inconsistent
+
+- Can we test for instrument endogeneity?
+
+
+## Identification
+
+- $\beta_1,\ldots,\beta_k$ are **over-identified** when $m > k$
+
+- $\beta_1,\ldots,\beta_k$ are **under-identified** when $m < k$
+
+- $\beta_1,\ldots,\beta_k$ are **exact-identified** when $m = k$
+
+- Terminology and intuition from system of equations: 
+
+  Instrumental variable estimation involves solving a system of $m$ **moment conditions** in $k$ unknown parameters
+
+  \begin{multline*}
+  \mathrm{E}\bigg[ \big(Y - \beta_0 - \beta_1 X_1 - ... - \beta_k X_k \\
+  - \beta_{k+1} W_{1} - \ldots - \beta_{k+r} W_{r} \big) Z_m\bigg] = 0
+  \end{multline*}
+
+## Testing instrument exogeneity
+
+<!-- - When $\beta_1,\ldots,\beta_k$ are over-identified, we can test the null that the "extra" $m-k$ instruments are exogenous -->
+
+- If **all** the $m$ instruments $Z_{1i},\ldots,Z_{mi}$ are exogenous, they should each be uncorrelated with $u_i$
+
+- Teste $H_0: \delta_1 = \ldots = \delta_m = 0$ in the regression
+
+  \begin{multline*}
+  \hat{u}_{2SLS,i} = \delta_0 + \delta_1 Z_{1i} + \ldots + \delta_m Z_{mi} \\
+  + \delta_{m+1} W_{1i} + \ldots + \delta_{m+r} W_{1r} + e_i,
+  \end{multline*}
+  
+  where $\hat{u}_{2SLS,i}$ is the residuals from the 2SLS regression
+  
+- Note: null is instrument exogeneity
+  
+- Construct $J$-statistic: $J = m F \overset{d}{\rightarrow} \chi^2_{m-k}$
+  
+<!-- - This is a test of the $m-k$ over-identifying restrictions -->
+
+<!--   $F = 0$ if $m = k$ because fitted values in 2nd stage regression are uncorrelated with $\hat{u}_{2SLS,i}$ by construction -->
+
+## Overidentifying restrictions test in R
+
+```{r, echo = TRUE, eval = TRUE}    
+J.reg <- lm(iv1$residuals ~ SalesTax + tax + log(incprcap), data = CigarettesSW.1995)
+J.test <- linearHypothesis(J.reg, c("SalesTax=0", "tax=0"), test = "Chisq") 
+print(J.test) # Print J-statistic to console
+pchisq(J.test[2, 5], df = 1, lower.tail = FALSE) # p-value
+```
+
+
+# Summary
+
+## Summary
+
+- Consistency and accurate approximation of sampling distribution of 2SLS estimator depends critically on 
+
+  - Instrument relevance
+  
+  - Instrument exogeneity
+  
+- Instrument relevance is a testable restriction
+
+- If the IV regression is overidentified, we can test overidentifying restrictions (in support of instrument exogeneity)
+  
